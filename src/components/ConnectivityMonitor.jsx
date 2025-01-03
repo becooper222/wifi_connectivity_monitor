@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Card, CardHeader, CardTitle, CardContent } from '../components/ui/card';
-import { Wifi, WifiOff } from 'lucide-react';
+import { Wifi, WifiOff, RefreshCw } from 'lucide-react';
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 
 const ConnectivityMonitor = () => {
   const [isOnline, setIsOnline] = useState(window.navigator.onLine);
@@ -8,6 +9,7 @@ const ConnectivityMonitor = () => {
   const [debugLogs, setDebugLogs] = useState([]);
   const [startTime] = useState(new Date());
   const [uptime, setUptime] = useState('0h 0m 0s');
+  const [latencyData, setLatencyData] = useState([]);
 
   useEffect(() => {
     const handleOnline = () => {
@@ -64,6 +66,13 @@ const ConnectivityMonitor = () => {
           
           setDebugLogs(prev => [...prev.slice(-4), `Connected to ${endpoint} (${latency}ms)`]);
           
+          // Update latency data
+          setLatencyData(prev => {
+            const now = new Date();
+            const newData = [...prev, { time: now.toLocaleTimeString(), latency }];
+            return newData.slice(-30); // Keep last 30 data points
+          });
+          
           if (!isOnline) {
             setIsOnline(true);
             addLog('Connected');
@@ -113,68 +122,87 @@ const ConnectivityMonitor = () => {
     return `${hours}h ${minutes}m ${seconds}s`;
   };
 
-  return (
-    <Card className="w-full">
-      <CardHeader>
-        <CardTitle className="flex items-center justify-between">
-          <span>Connection Status</span>
-          <div className="flex items-center gap-2">
-            {isOnline ? (
-              <Wifi className="text-green-500" size={24} />
-            ) : (
-              <WifiOff className="text-red-500" size={24} />
-            )}
-          </div>
-        </CardTitle>
-      </CardHeader>
-      <CardContent>
-        <div className="space-y-4">
-          <div className="flex justify-between p-4 bg-gray-100 rounded-lg">
-            <div>
-              <p className="text-sm font-medium">Status</p>
-              <p className={`text-lg ${isOnline ? 'text-green-600' : 'text-red-600'}`}>
-                {isOnline ? 'Connected' : 'Disconnected'}
-              </p>
-            </div>
-            <div>
-              <p className="text-sm font-medium">Monitoring Time</p>
-              <p className="text-lg">{uptime}</p>
-            </div>
-          </div>
+  const clearLatencyData = () => {
+    setLatencyData(prev => {
+      if (prev.length >= 2) {
+        return prev.slice(-2);
+      }
+      const now = new Date();
+      return [{ time: now.toLocaleTimeString(), latency: null }];
+    });
+  };
 
-          <div>
-            <h3 className="text-lg font-medium mb-2">Debug Information</h3>
-            <div className="bg-gray-100 p-2 rounded-lg mb-4 text-sm font-mono">
-              {debugLogs.map((log, index) => (
-                <div key={index} className="text-gray-600">{log}</div>
-              ))}
-            </div>
-            <h3 className="text-lg font-medium mb-2">Connection Log</h3>
-            <div className="max-h-64 overflow-y-auto space-y-2">
-              {logs.map((log, index) => (
-                <div
-                  key={index}
-                  className="flex justify-between p-2 border-b last:border-0"
-                >
-                  <span className={`${
-                    log.status === 'Connected' ? 'text-green-600' : 'text-red-600'
-                  }`}>
-                    {log.status}
-                  </span>
-                  <span className="text-gray-500 text-sm">
-                    {new Intl.DateTimeFormat('default', {
-                      hour: '2-digit',
-                      minute: '2-digit',
-                      second: '2-digit'
-                    }).format(log.timestamp)}
-                  </span>
-                </div>
-              ))}
-            </div>
+  return (
+    <div className="grid grid-cols-12 gap-4">
+      {/* Status Card */}
+      <Card className="col-span-4 h-[200px]">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            Status {isOnline ? <Wifi className="text-green-500" /> : <WifiOff className="text-red-500" />}
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <p className="text-lg font-semibold">{isOnline ? 'Connected' : 'Disconnected'}</p>
+          <p className="text-sm text-gray-500">Uptime: {uptime}</p>
+        </CardContent>
+      </Card>
+
+      {/* Latency Monitor */}
+      <Card className="col-span-8 h-[200px]">
+        <CardHeader className="flex flex-row items-center justify-between">
+          <CardTitle>Latency Monitor</CardTitle>
+          <button 
+            onClick={clearLatencyData}
+            className="p-1 hover:bg-gray-100 rounded-full transition-colors"
+            title="Clear and restart monitoring"
+          >
+            <RefreshCw className="h-5 w-5 text-gray-300" />
+          </button>
+        </CardHeader>
+        <CardContent className="h-[130px]">
+          <ResponsiveContainer width="100%" height="100%">
+            <LineChart data={latencyData}>
+              <CartesianGrid strokeDasharray="3 3" />
+              <XAxis dataKey="time" />
+              <YAxis />
+              <Tooltip />
+              <Line type="monotone" dataKey="latency" stroke="#8884d8" />
+            </LineChart>
+          </ResponsiveContainer>
+        </CardContent>
+      </Card>
+
+      {/* Connection Logs */}
+      <Card className="col-span-6 h-[200px]">
+        <CardHeader>
+          <CardTitle>Connection Logs</CardTitle>
+        </CardHeader>
+        <CardContent className="h-[130px] overflow-auto">
+          <div className="space-y-2">
+            {logs.slice(-5).map((log, index) => (
+              <div key={index} className="text-sm">
+                <span className="text-gray-500">{new Date(log.timestamp).toLocaleTimeString()}</span>
+                <span className="ml-2">{log.status}</span>
+              </div>
+            ))}
           </div>
-        </div>
-      </CardContent>
-    </Card>
+        </CardContent>
+      </Card>
+
+      {/* Debug Logs */}
+      <Card className="col-span-6 h-[200px]">
+        <CardHeader>
+          <CardTitle>Debug Logs</CardTitle>
+        </CardHeader>
+        <CardContent className="h-[130px] overflow-auto">
+          <div className="space-y-2">
+            {debugLogs.map((log, index) => (
+              <div key={index} className="text-sm text-gray-600">{log}</div>
+            ))}
+          </div>
+        </CardContent>
+      </Card>
+    </div>
   );
 };
 
